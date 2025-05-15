@@ -7,6 +7,7 @@ import com.project.bank.dto.usuario.request.TrocarSenhaRequest;
 import com.project.bank.dto.usuario.response.GerarTokenSenhaResponse;
 import com.project.bank.dto.usuario.response.LoginResponse;
 import com.project.bank.dto.usuario.response.ResponsePadrao;
+import com.project.bank.entity.suporte.TokenSenha;
 import com.project.bank.entity.Usuario;
 import com.project.bank.entity.enums.StatusUsuario;
 import com.project.bank.exception.CpfJaCadastradoException;
@@ -21,7 +22,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class UsuarioService {
@@ -31,7 +34,7 @@ public class UsuarioService {
     private final JwtService jwtService;
     private final EmailService emailService;
 
-    private String tokenSenha;
+    private Map<String, TokenSenha> tokenSenha = new ConcurrentHashMap<>();
     private Usuario usuarioLogado;
 
     public UsuarioService(UsuarioRepository usuarioRepository, UsuarioMapper usuarioMapper, BCryptPasswordEncoder passwordEncoder, JwtService jwtService, EmailService emailService) {
@@ -136,8 +139,10 @@ public class UsuarioService {
             throw new RuntimeException("Email ou Token incorretos! Tente Novamente.");
         }
 
+        limparTokensExpirados();
         String token = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
-        tokenSenha = token;
+        tokenSenha.put(usuario.getEmail(), new TokenSenha(token, LocalDateTime.now().plusMinutes(10)));
+
         try {
             String corpo = """
                 Olá %s,
@@ -175,6 +180,14 @@ public class UsuarioService {
         String jwtEmail = jwtService.extractEmail(jwtTokenFormatado);
         Usuario usuario = usuarioRepository.findUsuarioByEmail(request.getEmail());
 
+        TokenSenha tokenInfos = tokenSenha.get(request.getEmail());
+        if (tokenInfos == null || tokenInfos.getDataExpiracao().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Token expirado ou invalido! Gere um novo token.");
+        }
+        if (!tokenInfos.getToken().equals(request.getTokenSenha())) {
+            throw new RuntimeException("Token invalido! Cheque seu email para ver o token");
+        }
+
         if (!usuario.getEmail().equals(jwtEmail)) {
             throw new RuntimeException("Email ou Token incorretos! Tente Novamente.");
         }
@@ -184,13 +197,11 @@ public class UsuarioService {
         if (passwordEncoder.matches(request.getSenha(), usuario.getSenha())) {
             throw new RuntimeException("Nova senha nao pode ser igual a senha atual!");
         }
-        if (!tokenSenha.equals(request.getTokenSenha())) {
-            throw new RuntimeException("Token invalido! Cheque seu email para ver o token");
-        }
 
+        tokenSenha.remove(request.getEmail());
         usuario.setSenha(passwordEncoder.encode(request.getConfirmarSenha()));
-
         LocalDateTime data = LocalDateTime.now();
+
         try {
             String corpo = """
                 Olá %s,
@@ -221,5 +232,10 @@ public class UsuarioService {
                 usuario.getCpf(),
                 "Senha alterada com sucesso, cheque seu email!"
         );
+    }
+
+    private void limparTokensExpirados() {
+        LocalDateTime agora = LocalDateTime.now();
+        tokenSenha.entrySet().removeIf(entry -> entry.getValue().getDataExpiracao().isBefore(agora));
     }
 }
