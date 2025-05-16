@@ -1,9 +1,7 @@
 package com.project.bank.controller;
 
-import com.project.bank.dto.usuario.request.CadastroRequest;
-import com.project.bank.dto.usuario.request.GerarTokenSenhaRquest;
-import com.project.bank.dto.usuario.request.LoginRequest;
-import com.project.bank.dto.usuario.request.TrocarSenhaRequest;
+import com.project.bank.dto.usuario.request.*;
+import com.project.bank.dto.usuario.response.ResponsePadrao;
 import com.project.bank.entity.Usuario;
 import com.project.bank.repository.UsuarioRepository;
 import com.project.bank.service.UsuarioService;
@@ -79,5 +77,31 @@ public class UsuarioController {
     @GetMapping("/pegar-usuario-logado")
     public ResponseEntity<Usuario> getUsuarioLogado(@RequestHeader("Authorization") String jwtToken) {
         return ResponseEntity.status(200).body(usuarioService.getUsuarioLogado(jwtToken));
+    }
+
+    @PutMapping("/saldo/deposito")
+    public ResponseEntity<?> depostio(@RequestBody DepositoRequest request, @RequestHeader("Authorization") String jwtToken) {
+        try {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(
+                    usuarioService.depositar(request, jwtToken)
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(
+                    e.getMessage()
+            );
+        }
+    }
+
+    @PutMapping("/saldo/saque")
+    public ResponseEntity<?> saque(@RequestBody SaqueRequest request, @RequestHeader("Authorization") String jwtToken) {
+        try {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(
+                    usuarioService.sacar(request, jwtToken)
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(
+                    e.getMessage()
+            );
+        }
     }
 }

@@ -1,9 +1,6 @@
 package com.project.bank.service;
 
-import com.project.bank.dto.usuario.request.CadastroRequest;
-import com.project.bank.dto.usuario.request.GerarTokenSenhaRquest;
-import com.project.bank.dto.usuario.request.LoginRequest;
-import com.project.bank.dto.usuario.request.TrocarSenhaRequest;
+import com.project.bank.dto.usuario.request.*;
 import com.project.bank.dto.usuario.response.GerarTokenSenhaResponse;
 import com.project.bank.dto.usuario.response.LoginResponse;
 import com.project.bank.dto.usuario.response.ResponsePadrao;
@@ -237,5 +234,66 @@ public class UsuarioService {
     private void limparTokensExpirados() {
         LocalDateTime agora = LocalDateTime.now();
         tokenSenha.entrySet().removeIf(entry -> entry.getValue().getDataExpiracao().isBefore(agora));
+    }
+
+    public ResponsePadrao depositar(DepositoRequest request, String jwtToken) {
+        String jwtTokenFormatado = jwtToken.replace("Bearer ", "");
+        String jwtEmail = jwtService.extractEmail(jwtTokenFormatado);
+        Usuario usuario = usuarioRepository.findUsuarioByEmail(jwtEmail);
+
+        if (usuario == null) {
+            throw new UsuarioNaoEncotradoPeloEmailException();
+        }
+        if (!usuario.getEmail().equals(jwtEmail)) {
+            throw new RuntimeException("Email ou Token incorretos! Tente Novamente.");
+        }
+        if(!passwordEncoder.matches(request.getSenha(), usuario.getSenha())) {
+            return new ResponsePadrao(
+                    usuario.getCpf(),
+                    "Senha incorreta!"
+            );
+        }
+
+        usuario.setSaldo(usuario.getSaldo().add(request.getValor()));
+        usuarioRepository.save(usuario);
+
+        return new ResponsePadrao(
+                usuario.getCpf(),
+                "Valor depositado com sucesso! Total: " + usuario.getSaldo()
+        );
+    }
+
+    public ResponsePadrao sacar(SaqueRequest request, String jwtToken) {
+        String jwtTokenFormatado = jwtToken.replace("Bearer ", "");
+        String jwtEmail = jwtService.extractEmail(jwtTokenFormatado);
+        Usuario usuario = usuarioRepository.findUsuarioByEmail(jwtEmail);
+
+        if (usuario == null) {
+            throw new UsuarioNaoEncotradoPeloEmailException();
+        }
+        if (!usuario.getEmail().equals(jwtEmail)) {
+            throw new RuntimeException("Email ou Token incorretos! Tente Novamente.");
+        }
+
+        if(!passwordEncoder.matches(request.getSenha(), usuario.getSenha())) {
+            return new ResponsePadrao(
+                    usuario.getCpf(),
+                    "Senha incorreta!"
+            );
+        }
+        if (usuario.getSaldo().compareTo(request.getValor()) < 0) {
+            return new ResponsePadrao(
+                    usuario.getCpf(),
+                    "Nao possui saldo suficiente para saque! Saldo: " + usuario.getSaldo()
+            );
+        }
+
+        usuario.setSaldo(usuario.getSaldo().subtract(request.getValor()));
+        usuarioRepository.save(usuario);
+
+        return new ResponsePadrao(
+                usuario.getCpf(),
+                "Saque realizado com sucesso! Total: " + usuario.getSaldo()
+        );
     }
 }
